@@ -311,17 +311,22 @@ class HFSPlusDetailedAnalyzer:
                     
                 recordType = struct.unpack('>H', record_data[data_offset:data_offset+2])[0]
                 
-                if recordType in (1, 2):
+                if recordType in (1, 2, 3, 4):
                     ord_str = get_ordinal(i + 1)
-                    ftype_desc = "папка" if recordType == 1 else "файл"
+                    
+                    if recordType == 1: ftype_desc = "папка (folder)"
+                    elif recordType == 2: ftype_desc = "файл (file)"
+                    elif recordType == 3: ftype_desc = "поток папки (folder thread)"
+                    elif recordType == 4: ftype_desc = "поток файла (file thread)"
+                    else: ftype_desc = f"неизвестно (0x{recordType:04X})"
                     
                     print("\n  ──────────────────────────────────────────────────────────────────────")
                     print(f"        {ord_str} запись (смещение внутри узла 0x{rec_offset:04X}):")
                     print(f"        {record_data[:16].hex(' ').upper()} ...")
-                    print(f"        parentID =\n        0x{parentID:08X} → {parentID}")
-                    print(f"        keyLength =\n        0x{keyLength:04X} → {keyLength} байт")
-                    print(f"        nodeName =\n        «{nodeName}»")
-                    print(f"        recordType =\n        0x{recordType:04X} → {ftype_desc}")
+                    print(f"        keyLength =0x{keyLength:04X} → {keyLength} байт")
+                    print(f"        parentID = 0x{parentID:08X} → {parentID}")
+                    print(f"        nodeName = «{nodeName}»")
+                    print(f"        recordType = 0x{recordType:04X} → {ftype_desc}")
                     
                     item_info = {
                         'name': nodeName,
@@ -343,11 +348,10 @@ class HFSPlusDetailedAnalyzer:
                         print(f"        folderID = 0x{folderID:08X} ({folderID})")
                         print(f"        createDate = {format_time_msk(createDate)}")
 
-
                         if parentID == 1 and folderID == 2:
                             self.volume_name = nodeName
-                            print(f"\n        *** НАЙДЕНА МЕТКА ТОМА (VOLUME NAME): «{self.volume_name}» ***\n")
-                        
+                            print(f"\n МЕТКА ТОМА: «{self.volume_name}»\n")
+                            
                     elif recordType == 2:
                         fileID = struct.unpack('>I', record_data[data_offset+8:data_offset+12])[0]
                         createDate = struct.unpack('>I', record_data[data_offset+12:data_offset+16])[0]
@@ -387,9 +391,18 @@ class HFSPlusDetailedAnalyzer:
                                 'extents': extents
                             })
                             
+                    elif recordType in (3, 4):
+                        if len(record_data) >= data_offset + 10:
+                            thread_parentID = struct.unpack('>I', record_data[data_offset+4:data_offset+8])[0]
+                            thread_nameLen = struct.unpack('>H', record_data[data_offset+8:data_offset+10])[0]
+                            thread_name_bytes = record_data[data_offset+10 : data_offset+10+(thread_nameLen*2)]
+                            thread_nodeName = thread_name_bytes.decode('utf-16be', errors='ignore')
+                            print(f"        [Thread Data] Обратная ссылка: parentID = {thread_parentID}, name = «{thread_nodeName}»")
+                            
                     if parentID not in self.tree_nodes:
                         self.tree_nodes[parentID] = []
-                    self.tree_nodes[parentID].append(item_info)
+                    if recordType in (1, 2):
+                        self.tree_nodes[parentID].append(item_info)
                     
             current_node = fLink
             leaf_idx += 1
@@ -416,7 +429,7 @@ class HFSPlusDetailedAnalyzer:
         for file_info in self.files_info:
             target_path = path_map.get(file_info['cnid'], os.path.join(self.extract_base_dir, file_info['name']))
             
-            print(f"Извлечение: {file_info['name']} ({file_info['size']} байт) -> {target_path}")
+            print(f"Извлечен {file_info['name']} ({file_info['size']} байт) -> {target_path}")
             
             try:
                 with open(target_path, 'wb') as out_f:
