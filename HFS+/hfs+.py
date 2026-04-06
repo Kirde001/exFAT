@@ -314,19 +314,19 @@ class HFSPlusDetailedAnalyzer:
                 if recordType in (1, 2, 3, 4):
                     ord_str = get_ordinal(i + 1)
                     
-                    if recordType == 1: ftype_desc = "папка (folder)"
-                    elif recordType == 2: ftype_desc = "файл (file)"
-                    elif recordType == 3: ftype_desc = "поток папки (folder thread)"
-                    elif recordType == 4: ftype_desc = "поток файла (file thread)"
-                    else: ftype_desc = f"неизвестно (0x{recordType:04X})"
+                    if recordType == 1: ftype_desc = "папка"
+                    elif recordType == 2: ftype_desc = "файл"
+                    elif recordType == 3: ftype_desc = "потоковая запись папки"
+                    elif recordType == 4: ftype_desc = "потоковая запись файла"
+                    else: ftype_desc = f"неизвестно (0x{recordType:04X}) - что-то явно пошло не так"
                     
                     print("──────────────────────────────────────────────────────────────────────")
-                    print(f"{ord_str} запись (смещение внутри узла 0x{rec_offset:04X}):")
+                    print(f"{ord_str} запись, смещение внутри узла 0x{rec_offset:04X}")
                     print(f"{record_data[:16].hex(' ').upper()} ...")
-                    print(f"keyLength =0x{keyLength:04X} → {keyLength} байт")
-                    print(f"parentID = 0x{parentID:08X} → {parentID}")
-                    print(f"nodeName = «{nodeName}»")
-                    print(f"recordType = 0x{recordType:04X} → {ftype_desc}")
+                    print(f"keyLength => 0x{keyLength:04X} => {keyLength} байт")
+                    print(f"parentID => 0x{parentID:08X} => {parentID}")
+                    print(f"nodeName => «{nodeName}»")
+                    print(f"recordType => 0x{recordType:04X} => {ftype_desc}")
                     
                     item_info = {
                         'name': nodeName,
@@ -345,12 +345,12 @@ class HFSPlusDetailedAnalyzer:
                         item_info['createDate'] = createDate
                         
                         self.total_dirs += 1
-                        print(f"folderID = 0x{folderID:08X} ({folderID})")
-                        print(f"createDate = {format_time_msk(createDate)}")
+                        print(f"folderID => 0x{folderID:08X} (ID {folderID})")
+                        print(f"createDate => {format_time_msk(createDate)}")
 
                         if parentID == 1 and folderID == 2:
                             self.volume_name = nodeName
-                            print(f"МЕТКА ТОМА: «{self.volume_name}»")
+                            print(f"Метка тома: «{self.volume_name}»")
                             
                     elif recordType == 2:
                         fileID = struct.unpack('>I', record_data[data_offset+8:data_offset+12])[0]
@@ -377,10 +377,10 @@ class HFSPlusDetailedAnalyzer:
                         print(f"fileID = 0x{fileID:08X} ({fileID})")
                         print(f"logicalSize = 0x{logicalSize:016X} ({logicalSize} байт)")
                         if extents:
-                            print(f"dataFork Start Block = 0x{extents[0][0]:02X}")
-                            print(f"dataFork Block Count = 0x{extents[0][1]:02X}")
+                            print(f"dataFork startBlock => 0x{extents[0][0]:02X}")
+                            print(f"dataFork blockCount => 0x{extents[0][1]:02X}")
                             phys_file = self.partition_offset + (extents[0][0] * self.blockSize)
-                            print(f"Физический адрес данных: 0x{phys_file:08X} (startBlock * blockSize)")
+                            print(f"Физический адрес данных определяем по формуле: fileOfs = 0x{phys_file:08X}")
                             
                             self.files_info.append({
                                 'name': nodeName,
@@ -397,7 +397,7 @@ class HFSPlusDetailedAnalyzer:
                             thread_nameLen = struct.unpack('>H', record_data[data_offset+8:data_offset+10])[0]
                             thread_name_bytes = record_data[data_offset+10 : data_offset+10+(thread_nameLen*2)]
                             thread_nodeName = thread_name_bytes.decode('utf-16be', errors='ignore')
-                            print(f"[Thread Data] Обратная ссылка: parentID = {thread_parentID}, name = «{thread_nodeName}»")
+                            print(f"обратная ссылка: parentID = {thread_parentID}, name = «{thread_nodeName}»")
                             
                     if parentID not in self.tree_nodes:
                         self.tree_nodes[parentID] = []
@@ -491,22 +491,16 @@ class HFSPlusDetailedAnalyzer:
         print("====================================================================================================")
         
         print(f"\n💿 ИНФОРМАЦИЯ О ТОМЕ:")
-        print(f"   - Метка тома (Имя): {self.volume_name}")
+        print(f"   - Метка тома: {self.volume_name}")
 
         print(f"\n📊 СТАТИСТИКА:")
         print(f"   - Всего объектов: {self.total_objects}")
         print(f"   - Каталогов: {self.total_dirs}")
         print(f"   - Файлов: {self.total_files}")
         
-        print(f"\n🔍 ОСОБЕННОСТИ HFS+:")
-        print("   - Вся адресация данных производится блоками распределения (Allocation Blocks)")
-        print(f"   - Размер блока: {self.blockSize} байт")
-        print("   - Структура каталогов организована в B-Tree (сбалансированное дерево поиска)")
-        print("   - Имена файлов хранятся в UTF-16 Big Endian")
-        
         print(f"\n📁 СТРУКТУРА:")
         print(f"   - Корневой каталог имеет ParentID = 2")
-        print(f"   - ✨ Файлы и структура каталогов успешно восстановлены в директорию: ./{self.extract_base_dir}/")
+        print(f"   - Файлы и структура каталогов успешно восстановлены в директорию ./{self.extract_base_dir}/")
 
 if __name__ == '__main__':
     if not os.path.exists(FILENAME):
